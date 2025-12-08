@@ -1,10 +1,10 @@
-name: IDC Stock Monitor
+name: IDC Stock Monitor (Realtime)
 
 on:
   schedule:
-    # 每 10 分钟运行一次（UTC），你可以自己改，比如 */5 表示 5 分钟一次
+    # 每 10 分钟运行一次（UTC），你可以改为 */5 表示 5 分钟
     - cron: "*/10 * * * *"
-  # 手动触发，方便你测试
+  # 手动触发，方便测试
   workflow_dispatch:
 
 jobs:
@@ -23,10 +23,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run monitor
+      - name: Run realtime monitor
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           TARGET_URL: ${{ secrets.TARGET_URL }}
           COOKIE: ${{ secrets.COOKIE }}
+          MODE: "realtime"
         run: python monitor.py
