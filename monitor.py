@@ -28,28 +28,17 @@ def parse_cookies(cookie_str: str):
     return cookies
 
 
-def escape_md_v2(text: str) -> str:
-    """
-    Telegram MarkdownV2 需要转义的字符：
-    _ * [ ] ( ) ~ ` > # + - = | { } . !
-    """
-    special_chars = r"_*[]()~`>#+-=|{}.!"
-    for ch in special_chars:
-        text = text.replace(ch, "\\" + ch)
-    return text
-
-
 def send_tg_message(text: str):
     """
-    发 Telegram 消息（MarkdownV2）
+    发 Telegram 消息（纯文本，不用 Markdown，避免 400 错误）
     """
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
+    data = {
         "chat_id": CHAT_ID,
         "text": text,
-        "parse_mode": "MarkdownV2",
+        # 不设置 parse_mode，发普通文本即可
     }
-    r = requests.post(url, data=payload, timeout=10)
+    r = requests.post(url, data=data, timeout=10)
     r.raise_for_status()
 
 
@@ -93,8 +82,8 @@ def fetch_stock():
 
     result = {}
 
-    # 找所有商品卡片
-    cards = soup.find_all("div", class_="card cartitem shadow w-100")
+    # ✅ 更宽松的选择器：所有同时带有 card 和 cartitem 的 div
+    cards = soup.select("div.card.cartitem")
 
     for card in cards:
         # 标题，例如 "HK-②"、"CA"、"DE"、"FR-①"、"FR-②"
@@ -102,18 +91,23 @@ def fetch_stock():
         if not title_tag:
             continue
 
-        name = title_tag.text.strip()
+        name = title_tag.get_text(strip=True)
 
         # 只关心 HK / CA / DE / FR 这些区域
         if not any(prefix in name for prefix in ["HK", "CA", "DE", "FR"]):
             continue
 
-        # 库存行：<p class="card-text">库存： 0</p>
-        stock_tag = card.find("p", class_="card-text")
+        # 页面里可能有多个 p.card-text，我们要找包含“库存”的那个
+        stock_tag = None
+        for p in card.find_all("p", class_="card-text"):
+            if "库存" in p.get_text():
+                stock_tag = p
+                break
+
         if not stock_tag:
             continue
 
-        stock_text = stock_tag.text.strip()
+        stock_text = stock_tag.get_text(strip=True)
         digits = "".join(ch for ch in stock_text if ch.isdigit())
         if not digits:
             continue
@@ -125,7 +119,7 @@ def fetch_stock():
 
 def build_message(stock_dict, mode: str) -> str:
     """
-    根据模式生成 MarkdownV2 文本
+    根据模式生成文本
     mode: "realtime" 实时；"daily" 每日汇总
     """
 
@@ -140,7 +134,6 @@ def build_message(stock_dict, mode: str) -> str:
         else:
             other[k] = v
 
-    # 排序一下，避免顺序乱
     hk = dict(sorted(hk.items(), key=lambda x: x[0]))
     other = dict(sorted(other.items(), key=lambda x: x[0]))
 
@@ -149,39 +142,31 @@ def build_message(stock_dict, mode: str) -> str:
     else:
         title = "⏱ IDC 实时库存"
 
-    lines = [escape_md_v2(title), ""]
+    lines = [title, ""]
 
     # HK 区（避孕套）
     if hk:
-        lines.append(escape_md_v2("【HK 区 \\(避孕套\\)】"))
+        lines.append("【HK 区（避孕套）】")
         for k, v in hk.items():
-            # 给一点简单状态提示：0 = 售罄；>0 = 有货
             if v == 0:
-                status = "售罄"
-                icon = "❌"
+                status = "售罄 ❌"
             else:
-                status = "有货"
-                icon = "✅"
-            line = f"{k}：{v} \\({status}{icon}\\)"
-            lines.append(escape_md_v2(line))
+                status = "有货 ✅"
+            lines.append(f"{k}: {v}（{status}）")
         lines.append("")
 
     # 其他区（避孕药）
     if other:
-        lines.append(escape_md_v2("【其他区 \\(避孕药\\)】"))
+        lines.append("【其他区（避孕药）】")
         for k, v in other.items():
             if v == 0:
-                status = "售罄"
-                icon = "❌"
+                status = "售罄 ❌"
             else:
-                status = "有货"
-                icon = "✅"
-            line = f"{k}：{v} \\({status}{icon}\\)"
-            lines.append(escape_md_v2(line))
+                status = "有货 ✅"
+            lines.append(f"{k}: {v}（{status}）")
         lines.append("")
 
-    footer = f"更新时间：{now_utc}"
-    lines.append(escape_md_v2(footer))
+    lines.append(f"更新时间：{now_utc}")
 
     return "\n".join(lines)
 
@@ -190,14 +175,13 @@ def main():
     try:
         stock = fetch_stock()
     except Exception as e:
-        # 抓取失败直接通知你
         msg = f"⚠️ 库存监控抓取失败：{e}"
-        send_tg_message(escape_md_v2(msg))
+        send_tg_message(msg)
         return
 
     if not stock:
         msg = "⚠️ 库存监控没有解析到任何库存，请检查页面结构或脚本。"
-        send_tg_message(escape_md_v2(msg))
+        send_tg_message(msg)
         return
 
     text = build_message(stock, MODE)
