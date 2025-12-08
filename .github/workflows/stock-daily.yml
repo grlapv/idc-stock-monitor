@@ -2,10 +2,12 @@ name: IDC Stock Monitor (Daily Summary)
 
 on:
   schedule:
-    # 每天北京时间早上 9 点左右发一次汇总
-    # GitHub 用 UTC，这里设为 1 点（UTC+8=9点）
+    # 每天北京时间 09:00 左右（UTC 01:00）
     - cron: "0 1 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   daily:
@@ -14,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,11 +27,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run daily summary
+      - name: Run daily summary (always send)
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           TARGET_URL: ${{ secrets.TARGET_URL }}
           COOKIE: ${{ secrets.COOKIE }}
           MODE: "daily"
+          ONLY_ON_CHANGE: "false"
         run: python monitor.py
+
+      - name: Commit last_stock.json if changed
+        run: |
+          if git status --porcelain last_stock.json | grep -q "last_stock.json"; then
+            echo "last_stock.json changed, committing..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add last_stock.json
+            git commit -m "Update last_stock.json [skip ci]" || echo "No changes to commit"
+            git push
+          else
+            echo "No changes in last_stock.json"
+          fi
