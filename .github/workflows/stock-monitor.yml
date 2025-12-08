@@ -2,10 +2,12 @@ name: IDC Stock Monitor (Realtime)
 
 on:
   schedule:
-    # 每 10 分钟运行一次（UTC），你可以改为 */5 表示 5 分钟
+    # 每 10 分钟运行一次（UTC）
     - cron: "*/10 * * * *"
-  # 手动触发，方便测试
   workflow_dispatch:
+
+permissions:
+  contents: write   # 允许向仓库提交 last_stock.json
 
 jobs:
   monitor:
@@ -14,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,11 +27,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run realtime monitor
+      - name: Run realtime monitor (only send on change)
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           TARGET_URL: ${{ secrets.TARGET_URL }}
           COOKIE: ${{ secrets.COOKIE }}
           MODE: "realtime"
+          ONLY_ON_CHANGE: "true"
         run: python monitor.py
+
+      - name: Commit last_stock.json if changed
+        run: |
+          if git status --porcelain last_stock.json | grep -q "last_stock.json"; then
+            echo "last_stock.json changed, committing..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add last_stock.json
+            git commit -m "Update last_stock.json [skip ci]" || echo "No changes to commit"
+            git push
+          else
+            echo "No changes in last_stock.json"
+          fi
