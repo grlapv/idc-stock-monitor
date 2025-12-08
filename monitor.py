@@ -43,12 +43,12 @@ def send_tg_message(text: str):
 
 def fetch_stock():
     """
-    解析页面上所有 HK 卡片，并提取库存数字。
+    解析页面上的所有卡片，并提取库存数字。
 
-    你的 HTML 示例：
+    支持的卡片示例：
     <div class="card cartitem shadow w-100">
       ...
-      <h4>HK-②</h4>
+      <h4>HK-②</h4> / <h4>CA</h4> / <h4>DE</h4> / <h4>FR-①</h4> / <h4>FR-②</h4>
       ...
       <p class="card-text">库存： 0</p>
       ...
@@ -58,7 +58,11 @@ def fetch_stock():
     {
         "HK-①": 7,
         "HK-②": 0,
-        "HK-③": 12
+        "HK-③": 12,
+        "CA": 0,
+        "DE": 0,
+        "FR-①": 0,
+        "FR-②": 0,
     }
     """
 
@@ -81,14 +85,15 @@ def fetch_stock():
     cards = soup.find_all("div", class_="card cartitem shadow w-100")
 
     for card in cards:
-        # 标题，例如 "HK-②"
+        # 标题，例如 "HK-②"、"CA"、"DE"、"FR-①"、"FR-②"
         title_tag = card.find("h4")
         if not title_tag:
             continue
 
         name = title_tag.text.strip()
-        if "HK" not in name:
-            # 只监控 HK 系列，其它可以忽略
+
+        # 只关心 HK / CA / DE / FR 这些区域
+        if not any(prefix in name for prefix in ["HK", "CA", "DE", "FR"]):
             continue
 
         # 库存行：<p class="card-text">库存： 0</p>
@@ -130,7 +135,7 @@ def main():
         return
 
     if not stock:
-        send_tg_message("⚠️ 库存监控没有解析到任何 HK 库存，请检查页面结构或脚本。")
+        send_tg_message("⚠️ 库存监控没有解析到任何库存，请检查页面结构或脚本。")
         return
 
     msg = format_stock(stock)
