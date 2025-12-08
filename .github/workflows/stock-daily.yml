@@ -1,0 +1,33 @@
+name: IDC Stock Monitor (Daily Summary)
+
+on:
+  schedule:
+    # 每天北京时间早上 9 点左右发一次汇总
+    # GitHub 用 UTC，这里设为 1 点（UTC+8=9点）
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily summary
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          TARGET_URL: ${{ secrets.TARGET_URL }}
+          COOKIE: ${{ secrets.COOKIE }}
+          MODE: "daily"
+        run: python monitor.py
