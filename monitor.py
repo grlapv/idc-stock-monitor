@@ -9,6 +9,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 TARGET_URL = os.environ["TARGET_URL"]
 COOKIE = os.environ.get("COOKIE", "")  # 形如 "a=1; b=2"
+MODE = os.environ.get("MODE", "realtime")  # realtime / daily
 # =============================================================
 
 
@@ -27,17 +28,28 @@ def parse_cookies(cookie_str: str):
     return cookies
 
 
+def escape_md_v2(text: str) -> str:
+    """
+    Telegram MarkdownV2 需要转义的字符：
+    _ * [ ] ( ) ~ ` > # + - = | { } . !
+    """
+    special_chars = r"_*[]()~`>#+-=|{}.!"
+    for ch in special_chars:
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
 def send_tg_message(text: str):
     """
-    发 Telegram 消息
+    发 Telegram 消息（MarkdownV2）
     """
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {
+    payload = {
         "chat_id": CHAT_ID,
         "text": text,
-        "parse_mode": "Markdown",
+        "parse_mode": "MarkdownV2",
     }
-    r = requests.post(url, data=data, timeout=10)
+    r = requests.post(url, data=payload, timeout=10)
     r.raise_for_status()
 
 
@@ -111,18 +123,66 @@ def fetch_stock():
     return result
 
 
-def format_stock(stock_dict):
+def build_message(stock_dict, mode: str) -> str:
     """
-    把库存 dict 转成可读文本
+    根据模式生成 MarkdownV2 文本
+    mode: "realtime" 实时；"daily" 每日汇总
     """
-    lines = ["📦 IDC 实时库存", ""]
-    for k in sorted(stock_dict.keys()):
-        lines.append(f"{k}: {stock_dict[k]}")
-    lines.append("")
-    lines.append(
-        "更新时间: "
-        + datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    )
+
+    now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # 分组
+    hk = {}
+    other = {}
+    for k, v in stock_dict.items():
+        if k.startswith("HK"):
+            hk[k] = v
+        else:
+            other[k] = v
+
+    # 排序一下，避免顺序乱
+    hk = dict(sorted(hk.items(), key=lambda x: x[0]))
+    other = dict(sorted(other.items(), key=lambda x: x[0]))
+
+    if mode == "daily":
+        title = "📊 IDC 每日库存汇总"
+    else:
+        title = "⏱ IDC 实时库存"
+
+    lines = [escape_md_v2(title), ""]
+
+    # HK 区（避孕套）
+    if hk:
+        lines.append(escape_md_v2("【HK 区 \\(避孕套\\)】"))
+        for k, v in hk.items():
+            # 给一点简单状态提示：0 = 售罄；>0 = 有货
+            if v == 0:
+                status = "售罄"
+                icon = "❌"
+            else:
+                status = "有货"
+                icon = "✅"
+            line = f"{k}：{v} \\({status}{icon}\\)"
+            lines.append(escape_md_v2(line))
+        lines.append("")
+
+    # 其他区（避孕药）
+    if other:
+        lines.append(escape_md_v2("【其他区 \\(避孕药\\)】"))
+        for k, v in other.items():
+            if v == 0:
+                status = "售罄"
+                icon = "❌"
+            else:
+                status = "有货"
+                icon = "✅"
+            line = f"{k}：{v} \\({status}{icon}\\)"
+            lines.append(escape_md_v2(line))
+        lines.append("")
+
+    footer = f"更新时间：{now_utc}"
+    lines.append(escape_md_v2(footer))
+
     return "\n".join(lines)
 
 
@@ -131,15 +191,17 @@ def main():
         stock = fetch_stock()
     except Exception as e:
         # 抓取失败直接通知你
-        send_tg_message(f"⚠️ 库存监控抓取失败：{e}")
+        msg = f"⚠️ 库存监控抓取失败：{e}"
+        send_tg_message(escape_md_v2(msg))
         return
 
     if not stock:
-        send_tg_message("⚠️ 库存监控没有解析到任何库存，请检查页面结构或脚本。")
+        msg = "⚠️ 库存监控没有解析到任何库存，请检查页面结构或脚本。"
+        send_tg_message(escape_md_v2(msg))
         return
 
-    msg = format_stock(stock)
-    send_tg_message(msg)
+    text = build_message(stock, MODE)
+    send_tg_message(text)
 
 
 if __name__ == "__main__":
