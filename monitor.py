@@ -5,10 +5,11 @@ from datetime import datetime
 
 
 # ========= 从环境变量里读配置（GitHub Secrets 会传进来） =========
+# 支持多个 URL，用逗号分隔：URL1,URL2,URL3...
+RAW_TARGET_URL = os.environ["TARGET_URL"]
+COOKIE = os.environ.get("COOKIE", "")  # 形如 "a=1; b=2"
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
-TARGET_URL = os.environ["TARGET_URL"]
-COOKIE = os.environ.get("COOKIE", "")  # 形如 "a=1; b=2"
 MODE = os.environ.get("MODE", "realtime")  # realtime / daily
 # =============================================================
 
@@ -36,43 +37,21 @@ def send_tg_message(text: str):
     data = {
         "chat_id": CHAT_ID,
         "text": text,
-        # 不设置 parse_mode，发普通文本即可
     }
     r = requests.post(url, data=data, timeout=10)
     r.raise_for_status()
 
 
-def fetch_stock():
+def fetch_stock_from_url(url: str):
     """
-    解析页面上的所有卡片，并提取库存数字。
-
-    支持的卡片示例：
-    <div class="card cartitem shadow w-100">
-      ...
-      <h4>HK-②</h4> / <h4>CA</h4> / <h4>DE</h4> / <h4>FR-①</h4> / <h4>FR-②</h4>
-      ...
-      <p class="card-text">库存： 0</p>
-      ...
-    </div>
-
-    返回值示例：
-    {
-        "HK-①": 7,
-        "HK-②": 0,
-        "HK-③": 12,
-        "CA": 0,
-        "DE": 0,
-        "FR-①": 0,
-        "FR-②": 0,
-    }
+    从单个 URL 解析库存，返回 dict
     """
-
     headers = {
         "User-Agent": "Mozilla/5.0",
     }
 
     resp = requests.get(
-        TARGET_URL,
+        url,
         headers=headers,
         cookies=parse_cookies(COOKIE),
         timeout=20,
@@ -82,7 +61,7 @@ def fetch_stock():
 
     result = {}
 
-    # ✅ 更宽松的选择器：所有同时带有 card 和 cartitem 的 div
+    # 所有商品卡片：class 里同时有 card 和 cartitem 就行
     cards = soup.select("div.card.cartitem")
 
     for card in cards:
@@ -115,6 +94,22 @@ def fetch_stock():
         result[name] = int(digits)
 
     return result
+
+
+def fetch_stock():
+    """
+    支持多个页面：把所有 URL 的库存合并到一个 dict
+    """
+    # 支持 TARGET_URL 填多个，用逗号分隔
+    urls = [u.strip() for u in RAW_TARGET_URL.split(",") if u.strip()]
+
+    total = {}
+    for url in urls:
+        part = fetch_stock_from_url(url)
+        # 后面的页面如果有同名（比如同一个地区在不同套餐里），以最后一个为准
+        total.update(part)
+
+    return total
 
 
 def build_message(stock_dict, mode: str) -> str:
