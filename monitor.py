@@ -68,15 +68,13 @@ def fetch_stock_from_url(url: str):
     cards = soup.select("div.card.cartitem")
 
     for card in cards:
-        # 标题，例如 "HK-②"、"CA"、"DE"、"FR-①"、"FR-②"
+        # 标题，例如 "HK-②"、"CA"、"DE"、"FR-①"、"FR-②"、以后新增的地区等
         title_tag = card.find("h4")
         if not title_tag:
             continue
 
         name = title_tag.get_text(strip=True)
-
-        # 只关心 HK / CA / DE / FR 这些区域
-        if not any(prefix in name for prefix in ["HK", "CA", "DE", "FR"]):
+        if not name:
             continue
 
         # 页面里可能有多个 p.card-text，要找包含“库存”的那个
@@ -155,7 +153,7 @@ def build_full_message(stock_dict, mode: str) -> str:
     """
     now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    # 分组
+    # 简单分组：名字以 HK 开头的放一组，其它一组
     hk = {}
     other = {}
     for k, v in stock_dict.items():
@@ -182,7 +180,7 @@ def build_full_message(stock_dict, mode: str) -> str:
         lines.append("")
 
     if other:
-        lines.append("【其他区（避孕药）】")
+        lines.append("【其他区】")
         for k, v in other.items():
             status = "售罄 ❌" if v == 0 else "有货 ✅"
             lines.append(f"{k}: {v}（{status}）")
@@ -226,7 +224,7 @@ def build_change_message(changes: dict, mode: str) -> str:
         lines.append("")
 
     if other_lines:
-        lines.append("【其他区（避孕药）】")
+        lines.append("【其他区】")
         lines.extend(other_lines)
         lines.append("")
 
