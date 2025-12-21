@@ -1,15 +1,15 @@
 {
-  "HK-①": 77,
-  "HK-②": 85,
-  "HK-③": 94,
-  "CA": 69,
-  "DE": 76,
-  "FR-①": 88,
-  "FR-②": 89,
-  "US（老虎机）": 22,
+  "HK-①": 75,
+  "HK-②": 84,
+  "HK-③": 93,
+  "CA": 67,
+  "DE": 75,
+  "FR-①": 86,
+  "FR-②": 87,
+  "US（老虎机）": 20,
   "US①（Oracle）": 32,
-  "US②（Oracle）": 39,
-  "JP（Oracle）": 30,
-  "KR（Oracle）": 17,
-  "IN（Oracle）": 14
+  "US②（Oracle）": 33,
+  "JP（Oracle）": 27,
+  "KR（Oracle）": 15,
+  "IDN（Oracle）": 12
 }
